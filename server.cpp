@@ -4,6 +4,34 @@
 #include <cstring>
 #include <iostream>
 
+class ScopedSocket
+{
+    private:
+        int fd;
+    
+    public:
+
+        explicit ScopedSocket(int socket_fd) : fd(socket_fd) {}
+
+        ~ScopedSocket()
+        {
+            if(fd >= 0)
+            {
+                close(fd);
+                std::cout << "Client socket closed automatically\n";
+            }
+        }
+
+        int get() const
+        {
+            return fd;
+        }
+
+        ScopedSocket(const ScopedSocket&) = delete;
+        ScopedSocket& operator=(const ScopedSocket&) = delete;
+
+};
+
 class HT_Server
 {   
     private:
@@ -42,7 +70,7 @@ class HT_Server
                 exit(1);
             }
 
-            if(listen(server_fd, 1) < 0)
+            if(listen(server_fd, 5) < 0)
             {
                 perror("Listen failed");
                 close(server_fd);
@@ -63,23 +91,25 @@ class HT_Server
 
         void run()
         {
-            sockaddr_in client_address{};
-            socklen_t addrlen = sizeof(client_address);
-
-            int client_socket =  accept(server_fd, (struct sockaddr*)&client_address, &addrlen);
-            if(client_socket < 0)
+            while(true)
             {
-                perror("Accept failed");
-                return;
+                sockaddr_in client_address{};
+                socklen_t addrlen = sizeof(client_address);
+
+                int raw_client_socket =  accept(server_fd, (struct sockaddr*)&client_address, &addrlen);
+                if(raw_client_socket < 0)
+                {
+                    perror("Accept failed");
+                    return;
+                }
+
+                ScopedSocket client_socket(raw_client_socket);
+                std::cout << "Client Connected\n";
+
+                const char* message = "Hello Komal Sharma";
+                send(client_socket.get(), message, strlen(message), 0);
+
             }
-
-            std::cout << "Client Connected\n";
-
-            const char* message = "Hello Komal Sharma";
-            send(client_socket, message, strlen(message), 0);
-
-            close(client_socket);
-            std::cout << "Client Disonnected\n";
         } 
         
         HT_Server(const HT_Server&) = delete;
