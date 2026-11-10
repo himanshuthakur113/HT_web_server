@@ -13,6 +13,15 @@ int main()
         return 1;
     }
 
+    //if server stop and restart immediately the os say port already in use for solving that using setsockopt()
+    int opt = 1;
+    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        perror("socket option set failed");
+        close(server_fd);
+        return 1;
+    } 
+
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -44,7 +53,7 @@ int main()
     }
 
     std::cout << "Client connected!\n";
-    
+
     const char* message = "Hello";
     send(client_socket, message, strlen(message), 0);
 
