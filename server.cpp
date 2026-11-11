@@ -3,6 +3,7 @@
 #include <unistd.h>     //for close() system call
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 class ScopedSocket
 {
@@ -29,6 +30,17 @@ class ScopedSocket
 
         ScopedSocket(const ScopedSocket&) = delete;
         ScopedSocket& operator=(const ScopedSocket&) = delete;
+
+        ScopedSocket& operator=(ScopedSocket&& other) noexcept
+        {
+            if(this != &other)
+            {
+                if(fd >= 0) close(fd);
+                fd = other.fd;
+                other.fd =  -1;
+            }
+            return *this;
+        }
 
 };
 
@@ -102,12 +114,19 @@ class HT_Server
                     perror("Accept failed");
                     return;
                 }
+                
+                std::thread([client_fd = raw_client_socket]()
+                {   
+                    ScopedSocket client_socket(client_fd);
+                    std::cout << "Thread " << std::this_thread::get_id << "\n";
 
-                ScopedSocket client_socket(raw_client_socket);
-                std::cout << "Client Connected\n";
+                    const char* message = "Hello Komal Sharma";
+                    send(client_socket.get(), message, strlen(message), 0);
 
-                const char* message = "Hello Komal Sharma";
-                send(client_socket.get(), message, strlen(message), 0);
+                    sleep(2);
+
+                    std::cout <<"connection closed " <<std::this_thread::get_id() << "\n";
+                }).detach();
 
             }
         } 
