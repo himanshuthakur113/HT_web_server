@@ -112,13 +112,13 @@ class HT_Server
                 if(raw_client_socket < 0)
                 {
                     perror("Accept failed");
-                    return;
+                    continue;
                 }
                 
                 std::thread([client_fd = raw_client_socket]()
                 {   
                     ScopedSocket client_socket(client_fd);
-                    std::cout << "Thread " << std::this_thread::get_id << "\n";
+                    std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
                     const char* message = "Welcome to HT server\n";
                     send(client_socket.get(), message, strlen(message), 0);
@@ -134,6 +134,7 @@ class HT_Server
                         if(bytes_recieved <= 0)
                         {
                             std::cout << "Thread " << std::this_thread::get_id() << ": Client Disconnected or Error\n";
+                            break;
                         }
 
                         std::cout << "Thread " << std::this_thread::get_id() << ": Received: " << buffer;
