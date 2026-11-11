@@ -120,12 +120,27 @@ class HT_Server
                     ScopedSocket client_socket(client_fd);
                     std::cout << "Thread " << std::this_thread::get_id << "\n";
 
-                    const char* message = "Hello Komal Sharma";
+                    const char* message = "Welcome to HT server\n";
                     send(client_socket.get(), message, strlen(message), 0);
 
-                    sleep(2);
+                    char buffer[1024];
 
-                    std::cout <<"connection closed " <<std::this_thread::get_id() << "\n";
+                    while(true)
+                    {
+                        memset(buffer, 0, sizeof(buffer));
+
+                        ssize_t bytes_recieved = recv(client_socket.get(), buffer, sizeof(buffer) - 1,0);
+
+                        if(bytes_recieved <= 0)
+                        {
+                            std::cout << "Thread " << std::this_thread::get_id() << ": Client Disconnected or Error\n";
+                        }
+
+                        std::cout << "Thread " << std::this_thread::get_id() << ": Received: " << buffer;
+
+                        send(client_socket.get(), buffer, bytes_recieved, 0);
+                    }
+
                 }).detach();
 
             }

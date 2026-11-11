@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>  //for inet_pton
 #include <iostream>
+#include <string>
 int main()
 {
     int c_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -34,12 +35,27 @@ int main()
     std::cout << "Server connected successfully\n";
 
     char buffer[1024] = {0};
-    
-    size_t bytes_received = read(c_socket, buffer, sizeof(buffer) - 1);
-    
+    ssize_t bytes_received = read(c_socket, buffer, sizeof(buffer) - 1);
     if(bytes_received > 0)
-    std::cout << buffer <<"\n";
+    {
+        std::cout << buffer;
+    }
 
+    std::cout << "enter message: ";
+    std::string line;
+    std::getline(std::cin,line);
+    
+    line += "\n";
+    
+    send(c_socket, line.c_str(), line.length(), 0);
+    
+    char buffer_2[1024] = {0};
+    ssize_t bytes_received_2 = read(c_socket, buffer_2, sizeof(buffer_2) - 1);
+    
+    if(bytes_received_2 > 0)
+    {
+        std::cout << "Echo from server: " << buffer_2;
+    }
     close(c_socket);
     return 0;
     
