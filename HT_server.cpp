@@ -74,27 +74,56 @@ void HT_Server::run()
             ScopedSocket client_socket(client_fd);
             std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
-            const char* message = "Welcome to HT server\n";
-            send(client_socket.get(), message, strlen(message), 0);
+            // const char* message = "Welcome to HT server\n";
+            // send(client_socket.get(), message, strlen(message), 0);
 
-            char buffer[1024];
+            char buffer[4096] = {0};
 
-            while(true)
+            ssize_t bytes_received = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
+            if(bytes_received > 0)
             {
-                memset(buffer, 0, sizeof(buffer));
-
-                ssize_t bytes_recieved = recv(client_socket.get(), buffer, sizeof(buffer) - 1,0);
-
-                if(bytes_recieved <= 0)
-                {
-                    std::cout << "Thread " << std::this_thread::get_id() << ": Client Disconnected or Error\n";
-                    break;
-                }
-
-                std::cout << "Thread " << std::this_thread::get_id() << ": Received: " << buffer;
-
-                send(client_socket.get(), buffer, bytes_recieved, 0);
+                std::cout << "HTTP Request Received " << buffer <<"\n";
             }
+
+            std::string html_body = 
+            "<!DOCTYPE html>\n"
+                "<html>\n"
+                "<head>\n"
+                "    <title>C++ Custom Web Server</title>\n"
+                "</head>\n"
+                "<body>\n"
+                "        <h1>Hello from your HT Web Server</h1>\n"
+                "</body>\n"
+                "</html>\n";
+
+            std::string http_response = 
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Content-Length: " + std::to_string(html_body.length()) + "\r\n"
+            "Connection: close\r\n"
+            "\r\n" + 
+            html_body;
+            
+
+            // while(true)
+            // {
+            //     memset(buffer, 0, sizeof(buffer));
+
+            //     ssize_t bytes_recieved = recv(client_socket.get(), buffer, sizeof(buffer) - 1,0);
+
+            //     if(bytes_recieved <= 0)
+            //     {
+            //         std::cout << "Thread " << std::this_thread::get_id() << ": Client Disconnected or Error\n";
+            //         break;
+            //     }
+
+            //     std::cout << "Thread " << std::this_thread::get_id() << ": Received: " << buffer;
+
+            //     send(client_socket.get(), buffer, bytes_recieved, 0);
+            // }
+
+            send(client_socket.get(), http_response.c_str(), http_response.length(), 0);
+            std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
 
         }).detach();
     }
