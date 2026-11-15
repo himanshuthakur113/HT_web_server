@@ -1,5 +1,6 @@
 #include "HT_server.hpp"
 #include "ScopedSocket.hpp"
+#include "HTTPRequest.hpp"
 #include <sys/socket.h> //for socket(),bind(),listen(),accpet() system call
 #include <netinet/in.h> //for sockaddr_in
 #include <unistd.h>     //for close() system call
@@ -68,25 +69,42 @@ void HT_Server::run()
                 perror("Accept failed");
                 continue;
             }
+        //so after the accept call when client(browser) connected to the server
+        // it will send a block of raw text formatted according to HTTP/1.1 
                 
         std::thread([client_fd = raw_client_socket]()
         {   
             ScopedSocket client_socket(client_fd);
             std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
-            // const char* message = "Welcome to HT server\n";
-            // send(client_socket.get(), message, strlen(message), 0);
 
             char buffer[4096] = {0};
 
             ssize_t bytes_received = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
             if(bytes_received > 0)
             {
-                std::cout << "HTTP Request Received " << buffer <<"\n";
+                std::cout << "\nHTTP Request Received\n" << buffer <<"\n";
+            }
+            else
+            {
+                return;
             }
 
-            std::string html_body = 
-            "<!DOCTYPE html>\n"
+            //the text received from the client(browser) is stored inside this buffer
+
+            HTTPRequest request;
+            bool success = request.parse(std::string(buffer, bytes_received));
+
+            std::string http_response;
+
+            if(success)
+            {
+                std::cout << "[Parser] Method: " << request.getMethod()
+                          << "  | URI: " << request.getUri()
+                          << "  | Host: " << request.getHeader("Host") << "\n";
+
+                std::string html_body = 
+                "<!DOCTYPE html>\n"
                 "<html>\n"
                 "<head>\n"
                 "    <title>C++ Custom Web Server</title>\n"
@@ -96,31 +114,37 @@ void HT_Server::run()
                 "</body>\n"
                 "</html>\n";
 
-            std::string http_response = 
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html; charset=UTF-8\r\n"
-            "Content-Length: " + std::to_string(html_body.length()) + "\r\n"
-            "Connection: close\r\n"
-            "\r\n" + 
-            html_body;
-            
+                http_response = 
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=UTF-8\r\n"
+                "Content-Length: " + std::to_string(html_body.length()) + "\r\n"
+                "Connection: close\r\n"
+                "\r\n" + 
+                html_body;
 
-            // while(true)
-            // {
-            //     memset(buffer, 0, sizeof(buffer));
+            }
+            else
+            {
+                std::string error_body = 
+                "<!DOCTYPE html>\n"
+                "<html>\n"
+                "<head>\n"
+                "    <title>C++ Custom Web Server</title>\n"
+                "</head>\n"
+                "<body>\n"
+                "        <h1><h1>400 Bad Request</h1><p>Your browser sent a malformed request.</p></h1>\n"
+                "</body>\n"
+                "</html>\n"; 
 
-            //     ssize_t bytes_recieved = recv(client_socket.get(), buffer, sizeof(buffer) - 1,0);
+                http_response = 
+                "HTTP/1.1 400 Bad Request\r\n"
+                "Content-Type: text/html; charset=UTF-8\r\n"
+                "Content-Length: " + std::to_string(error_body.length()) + "\r\n"
+                "Connection: close\r\n"
+                "\r\n" + 
+                error_body;
 
-            //     if(bytes_recieved <= 0)
-            //     {
-            //         std::cout << "Thread " << std::this_thread::get_id() << ": Client Disconnected or Error\n";
-            //         break;
-            //     }
-
-            //     std::cout << "Thread " << std::this_thread::get_id() << ": Received: " << buffer;
-
-            //     send(client_socket.get(), buffer, bytes_recieved, 0);
-            // }
+            }
 
             send(client_socket.get(), http_response.c_str(), http_response.length(), 0);
             std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
