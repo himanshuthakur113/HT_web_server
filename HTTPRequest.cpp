@@ -55,7 +55,7 @@ bool HTTPRequest::parse(const std::string& raw_request)
         std::string key = line.substr(0, colon_pos); //start from zero and extract the char before colon,colon_pass is given as size
         std::string value = line.substr(colon_pos + 1); //after colon pos to end
 
-        size_t start = value.find_first_not_of("\t"); //first char that in not space or tab 
+        size_t start = value.find_first_not_of(" \t"); //first char that in not space or tab 
         if(start != std::string::npos)
         {
             value = value.substr(start);
