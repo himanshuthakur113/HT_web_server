@@ -77,23 +77,53 @@ void HT_Server::run()
             ScopedSocket client_socket(client_fd);
             std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
+            std::string data;
+            char buffer[4096];
+            size_t header_end;
 
-            char buffer[4096] = {0};
+            while((header_end = data.find("\r\n\r\n")) == std::string::npos)
+            {   
+                if(data.size() > 1024 * 1024) return;
 
-            ssize_t bytes_received = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
-            if(bytes_received > 0)
-            {
-                std::cout << "\nHTTP Request Received\n" << buffer <<"\n";
+                //find return npos until \r\n\r\n arrived,so loop keep reading until  the headers are complete
+                ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
+                if(n <= 0)
+                {
+                    return;
+                }
+                data.append(buffer, n);
             }
-            else
+
+            std::string headers = data.substr(0, header_end);
+            size_t body_length = 0;
+            size_t pos = headers.find("Content-Length:"); //pos will hold index of start index at C in Content-Length
+            
+            if(pos != std::string::npos)
             {
-                return;
+                try { body_length = std::stoul(headers.substr(pos + 15)); } //15 = lenght of Content length
+                catch(...) {return; }
+                //stoul will skip leading spaces and stops at \r header end
             }
+
+            while(data.size() < header_end + 4 + body_length)
+            {   
+                if(data.size() > 1024 * 1024) return;
+
+                ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
+                if(n <= 0)
+                {
+                    return;
+                }
+                data.append(buffer,n);
+            }
+
+           
+            std::cout << "\nHTTP Request Received\n" << data <<"\n";
 
             //the text received from the client(browser) is stored inside this buffer
 
             HTTPRequest request;
-            bool success = request.parse(std::string(buffer, bytes_received));
+            bool success = request.parse(data);
 
             std::string http_response;
 

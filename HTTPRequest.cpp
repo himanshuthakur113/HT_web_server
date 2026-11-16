@@ -69,7 +69,7 @@ bool HTTPRequest::parse(const std::string& raw_request)
         headers[key] = value;
     }
 
-    if(headers.find("Content-Length") != headers.end())
+    if(headers.find("content-length") != headers.end())
     {
         try
         {
