@@ -121,8 +121,15 @@ std::string HTTPRequest::getVersion() const
 }
     
 std::string HTTPRequest::getHeader(const std::string& key) const
-{
-    auto it = headers.find(key);
+{   
+    std::string lower_key = key;
+
+    for(char &c: lower_key)
+    {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    auto it = headers.find(lower_key);
     if(it != headers.end())
     {
         return it->second;
