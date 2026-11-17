@@ -33,6 +33,7 @@ class HTTPRequest
     
         public:
             HTTPRequest();
+            bool parseHeaders(const std::string& raw_headers);
             bool parse(const std::string& raw_request);
             bool isValid() const;
             std::string getMethod() const;

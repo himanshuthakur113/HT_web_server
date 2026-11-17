@@ -94,15 +94,29 @@ void HT_Server::run()
                 data.append(buffer, n);
             }
 
-            std::string headers = data.substr(0, header_end);
+            std::string headers = data.substr(0, header_end + 4);
+
+            HTTPRequest request;
+            bool success = request.parseHeaders(headers);
+
             size_t body_length = 0;
-            size_t pos = headers.find("Content-Length:"); //pos will hold index of start index at C in Content-Length
             
-            if(pos != std::string::npos)
+            if(success)
             {
-                try { body_length = std::stoul(headers.substr(pos + 15)); } //15 = lenght of Content length
-                catch(...) {return; }
-                //stoul will skip leading spaces and stops at \r header end
+                std::string content_length = request.getHeader("content-length");
+                
+                if(!content_length.empty())
+                {
+                    try 
+                    { 
+                        body_length =  std::stoul(content_length); //stoul will skip leading spaces and stops at \r header end
+                    }
+                    catch(...) 
+                    {
+                        return; 
+                    }
+                    
+                }
             }
 
             while(data.size() < header_end + 4 + body_length)
@@ -117,13 +131,8 @@ void HT_Server::run()
                 data.append(buffer,n);
             }
 
-           
+            success = request.parse(data);
             std::cout << "\nHTTP Request Received\n" << data <<"\n";
-
-            //the text received from the client(browser) is stored inside this buffer
-
-            HTTPRequest request;
-            bool success = request.parse(data);
 
             std::string http_response;
 
