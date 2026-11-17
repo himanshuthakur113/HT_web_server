@@ -131,7 +131,7 @@ void HT_Server::run()
             {
                 std::cout << "[Parser] Method: " << request.getMethod()
                           << "  | URI: " << request.getUri()
-                          << "  | Host: " << request.getHeader("Host") << "\n";
+                          << "  | Host: " << request.getHeader("host") << "\n";
 
                 std::string html_body = 
                 "<!DOCTYPE html>\n"
