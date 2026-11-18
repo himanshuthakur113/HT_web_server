@@ -72,7 +72,7 @@ void HT_Server::run()
         //so after the accept call when client(browser) connected to the server
         // it will send a block of raw text formatted according to HTTP/1.1 
                 
-        std::thread([client_fd = raw_client_socket]()
+        std::thread ([client_fd = raw_client_socket,this]()
         {   
             ScopedSocket client_socket(client_fd);
             std::cout << "Thread " << std::this_thread::get_id() << "\n";
@@ -185,7 +185,10 @@ void HT_Server::run()
 
             }
 
-            send(client_socket.get(), http_response.c_str(), http_response.length(), 0);
+            if(!sendAll(client_socket.get(), http_response))
+            {
+                perror("Failed to send HTTP response\n");
+            }
             std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
 
         }).detach();
@@ -193,6 +196,21 @@ void HT_Server::run()
 }       
 
 
+bool HT_Server::sendAll(int socket, const std::string& response)
+{
+    size_t total = 0;
 
+    while(total < response.length())
+    {
+        ssize_t n = send(socket, response.c_str() + total, response.length() - total, MSG_NOSIGNAL);
 
+        if(n <= 0)
+        {
+            return false;
+        }
+
+        total += static_cast<size_t>(n);
+    }
+    return true;
+}
 
