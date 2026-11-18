@@ -1,6 +1,7 @@
 #include "HT_server.hpp"
 #include "ScopedSocket.hpp"
 #include "HTTPRequest.hpp"
+#include "HTTPResponse.hpp"
 #include <sys/socket.h> //for socket(),bind(),listen(),accpet() system call
 #include <netinet/in.h> //for sockaddr_in
 #include <unistd.h>     //for close() system call
@@ -134,7 +135,7 @@ void HT_Server::run()
             success = request.parse(data);
             std::cout << "\nHTTP Request Received\n" << data <<"\n";
 
-            std::string http_response;
+            HTTPResponse response;
 
             if(success)
             {
@@ -153,13 +154,10 @@ void HT_Server::run()
                 "</body>\n"
                 "</html>\n";
 
-                http_response = 
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/html; charset=UTF-8\r\n"
-                "Content-Length: " + std::to_string(html_body.length()) + "\r\n"
-                "Connection: close\r\n"
-                "\r\n" + 
-                html_body;
+                response.setStatusCode(200, "OK");
+                response.setHeader("Content-Type", "text/html; charset=UTF-8");
+                response.setHeader("Connection", "close");
+                response.setBody(html_body);
 
             }
             else
@@ -175,20 +173,20 @@ void HT_Server::run()
                 "</body>\n"
                 "</html>\n"; 
 
-                http_response = 
-                "HTTP/1.1 400 Bad Request\r\n"
-                "Content-Type: text/html; charset=UTF-8\r\n"
-                "Content-Length: " + std::to_string(error_body.length()) + "\r\n"
-                "Connection: close\r\n"
-                "\r\n" + 
-                error_body;
+                response.setStatusCode(400, "Bad Request");
+                response.setHeader("Content-Type", "text/html; charset=UTF-8");
+                response.setHeader("Connection", "close");
+                response.setBody(error_body);
 
             }
+
+            std::string http_response = response.toString();
 
             if(!sendAll(client_socket.get(), http_response))
             {
                 perror("Failed to send HTTP response\n");
             }
+            
             std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
 
         }).detach();
