@@ -2,6 +2,8 @@
 #include "ScopedSocket.hpp"
 #include "HTTPRequest.hpp"
 #include "HTTPResponse.hpp"
+#include "StaticFileHandler.hpp"
+
 #include <sys/socket.h> //for socket(),bind(),listen(),accpet() system call
 #include <netinet/in.h> //for sockaddr_in
 #include <unistd.h>     //for close() system call
@@ -143,22 +145,27 @@ void HT_Server::run()
                           << "  | URI: " << request.getUri()
                           << "  | Host: " << request.getHeader("host") << "\n";
 
-                std::string html_body = 
-                "<!DOCTYPE html>\n"
-                "<html>\n"
-                "<head>\n"
-                "    <title>C++ Custom Web Server</title>\n"
-                "</head>\n"
-                "<body>\n"
-                "        <h1>Hello from your HT Web Server</h1>\n"
-                "</body>\n"
-                "</html>\n";
+                StaticFileHandler fileHandler("public");
 
-                response.setStatusCode(200, "OK");
-                response.setHeader("Content-Type", "text/html; charset=UTF-8");
-                response.setHeader("Connection", "close");
-                response.setBody(html_body);
+                std::string body;
+                std::string contentType;
 
+                if(fileHandler.serve(request.getUri(), body, contentType))
+                {
+                    response.setStatusCode(200, "OK");
+                    response.setHeader("Content-Type", contentType);
+                    response.setHeader("Connection", "close");
+                    response.setBody(body);
+                }
+                else
+                {  
+                    std::string errorBody = "<h1>404 Not Found</h1>";
+
+                    response.setStatusCode(404, "Not Found");
+                    response.setHeader("Content-Type", "text/html");
+                    response.setHeader("Connection", "close");
+                    response.setBody(errorBody);
+                }       
             }
             else
             {
