@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <sys/stat.h>
+#include <cerrno>
 
 class StaticFileHandler
 {

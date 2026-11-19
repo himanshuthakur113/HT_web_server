@@ -65,6 +65,18 @@ bool StaticFileHandler::serve(const std::string& uri, std::string& body, std::st
 
     std::string filePath = publicRoot + path;
 
+    struct stat fileInfo{};
+
+    if(stat(filePath.c_str(), &fileInfo) != 0)
+    {
+        return false;
+    }
+
+    if(!S_ISREG(fileInfo.st_mode))
+    {
+        return false;
+    }
+
     std::ifstream file(filePath, std::ios::binary);
 
     if(!file.is_open())
