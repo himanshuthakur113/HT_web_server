@@ -80,71 +80,150 @@ void HT_Server::run()
             ScopedSocket client_socket(client_fd);
             std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
+            constexpr size_t MAX_HEADER_SIZE = 64 * 1024;
+            constexpr size_t MAX_BODY_SIZE = 1024 * 1024;
+            constexpr size_t MAX_REQUEST_SIZE = MAX_HEADER_SIZE + MAX_BODY_SIZE;
+
+            auto sendError = [&](int statusCode, const std::string& statusMessage, const std::string& message)
+            {
+                HTTPResponse response;
+
+                response.setStatusCode(statusCode, statusMessage);
+                response.setHeader("Content-Type", "text/plain");
+                response.setHeader("Connection", "close");
+                response.setBody(message);
+
+                std::string rawResponse = response.toString();
+
+                if(!sendAll(client_socket.get(), rawResponse))
+                {
+                    perror("Failed to send error response");
+                }
+            };
+
             std::string data;
             char buffer[4096];
             size_t header_end;
 
             while((header_end = data.find("\r\n\r\n")) == std::string::npos)
             {   
-                if(data.size() > 1024 * 1024) return;
+                if(data.size() >= MAX_HEADER_SIZE)
+                {
+                    sendError(431,"Request Header Fields Too Large", "Request headers excced the allowed size");
+                    return;
+                }
 
                 //find return npos until \r\n\r\n arrived,so loop keep reading until  the headers are complete
                 ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
                 if(n <= 0)
                 {
+                    if(!data.empty())
+                    {
+                        sendError(400, "Bad Request", "Incomplete HTTP headers");
+                    }
                     return;
                 }
-                data.append(buffer, n);
+                data.append(buffer, static_cast<size_t> (n));
+            }
+
+            if(header_end + 4 > MAX_HEADER_SIZE)
+            {
+                sendError(431, "Request Header Fields Too Large", "Request headers exceeds the allowed size");
+                return;
             }
 
             std::string headers = data.substr(0, header_end + 4);
 
             HTTPRequest request;
+
             bool success = request.parseHeaders(headers);
 
-            size_t body_length = 0;
-            
-            if(success)
+
+            if(!success)
             {
-                std::string content_length = request.getHeader("content-length");
+                sendError(400, "Bad Request", "Malformed HTTP header");
+                return;
+            }
+
+            size_t body_length = 0;
+                        
+            std::string content_length = request.getHeader("content-length");
                 
-                if(!content_length.empty())
+            if(!content_length.empty())
+            {
+                for(char c: content_length)
                 {
-                    try 
-                    { 
-                        body_length =  std::stoul(content_length); //stoul will skip leading spaces and stops at \r header end
-                    }
-                    catch(...) 
+                    if(c < '0' || c > '9')
                     {
-                        return; 
+                        sendError(400, "Bad Request", "Invalid Content-Length");
+                        return;
                     }
-                    
+
+                    size_t digit = static_cast<size_t>(c- '0');
+
+                    if(body_length > (MAX_BODY_SIZE - digit)/10)
+                    {
+                        sendError(413, "Content Too Large", "Request body exceeds 1 MB");
+                        return;
+                    }
+
+                    body_length = body_length * 10 + digit;
                 }
             }
 
-            while(data.size() < header_end + 4 + body_length)
-            {   
-                if(data.size() > 1024 * 1024) return;
+            size_t expected_size = header_end + 4 + body_length;
 
-                ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
-                if(n <= 0)
+            while(data.size() < expected_size)
+            {   
+                size_t remaining = expected_size - data.size();
+
+                size_t bytes_to_read;
+                if(sizeof(buffer) <= remaining)
                 {
+                    bytes_to_read = sizeof(buffer);
+                }
+                else
+                {
+                    bytes_to_read = remaining;
+                }
+
+                ssize_t n = recv(client_socket.get(), buffer, bytes_to_read, 0);
+
+                if(n <= 0)
+                {   
+                    sendError(400, "Bad Request", "Incomplete HTTP request body");
                     return;
                 }
-                data.append(buffer,n);
+
+                data.append(buffer,static_cast<size_t>(n));
             }
 
             success = request.parse(data);
+
+            if(!success)
+            {
+                sendError(400, "Bad Request", "Malformed HTTP Request");
+                return;
+            }
+
             std::cout << "\nHTTP Request Received\n" << data <<"\n";
 
             HTTPResponse response;
 
-            if(success)
-            {
-                std::cout << "[Parser] Method: " << request.getMethod()
-                          << "  | URI: " << request.getUri()
-                          << "  | Host: " << request.getHeader("host") << "\n";
+            std::cout << "[Parser] Method: " << request.getMethod()
+                        << "  | URI: " << request.getUri()
+                        << "  | Host: " << request.getHeader("host") << "\n";
 
+            if(request.getMethod() != "GET" && request.getMethod() != "HEAD")
+            {
+                response.setStatusCode(405, "Method Not Allowed");
+                response.setHeader("Allow", "GET, HEAD");
+                response.setHeader("Content-Type", "text/plain");
+                response.setHeader("Connection", "close");
+                response.setBody("405 Method Not Allowed");
+            }
+            else
+            {
                 StaticFileHandler fileHandler("public");
 
                 std::string body;
@@ -160,34 +239,14 @@ void HT_Server::run()
                 else
                 {  
                     std::string errorBody = "<h1>404 Not Found</h1>";
-
                     response.setStatusCode(404, "Not Found");
                     response.setHeader("Content-Type", "text/html");
                     response.setHeader("Connection", "close");
                     response.setBody(errorBody);
-                }       
-            }
-            else
-            {
-                std::string error_body = 
-                "<!DOCTYPE html>\n"
-                "<html>\n"
-                "<head>\n"
-                "    <title>C++ Custom Web Server</title>\n"
-                "</head>\n"
-                "<body>\n"
-                "        <h1><h1>400 Bad Request</h1><p>Your browser sent a malformed request.</p></h1>\n"
-                "</body>\n"
-                "</html>\n"; 
+                }      
+            }              
 
-                response.setStatusCode(400, "Bad Request");
-                response.setHeader("Content-Type", "text/html; charset=UTF-8");
-                response.setHeader("Connection", "close");
-                response.setBody(error_body);
-
-            }
-
-            std::string http_response = response.toString();
+            std::string http_response = response.toString(request.getMethod() != "HEAD" && success);
 
             if(!sendAll(client_socket.get(), http_response))
             {

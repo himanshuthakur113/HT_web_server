@@ -19,7 +19,7 @@ class HTTPResponse
         void setHeader(const std::string& key, const std::string& value);
         void setBody(const std::string& content);
 
-        std::string toString() const;
+        std::string toString(bool includeBody = true) const;
 };
 
 #endif

@@ -22,7 +22,7 @@ void HTTPResponse::setBody(const std::string& content)
     body = content;
 }
 
-std::string HTTPResponse::toString() const
+std::string HTTPResponse::toString(bool includeBody) const
 {
     std::ostringstream response;
 
@@ -38,7 +38,9 @@ std::string HTTPResponse::toString() const
 
     response << "Content-Length: " << body.size() << "\r\n";
     response << "\r\n";
-    response << body;
+
+    if(includeBody)
+        response.write(body.data(),body.size());
 
     return response.str();
 
