@@ -48,6 +48,7 @@ HT_Server::HT_Server(const ServerConfig& config) : config_(config)
         exit(1);
     }
 
+    if(config_.verbose)
     std::cout << "Server successfully started and listening on port " <<config_.port << "...\n";
 }
 
@@ -61,7 +62,7 @@ HT_Server::~HT_Server()
         server_fd = -1;
     }
 
-    std::cout << "Server closed successfully\n";
+    if(config_.verbose) std::cout << "Server closed successfully\n";
 }
 
 void HT_Server::run()
@@ -147,7 +148,7 @@ bool HT_Server::sendAll(int socket, const std::string& response)
 void HT_Server::handleClient(int client_fd)
 {
     ScopedSocket client_socket(client_fd);
-    std::cout << "Thread " << std::this_thread::get_id() << "\n";
+    if(config_.verbose) std::cout << "\nThread " << std::this_thread::get_id() << "\n";
 
     constexpr size_t MAX_HEADER_SIZE = 64 * 1024;
     constexpr size_t MAX_BODY_SIZE = 1024 * 1024;
@@ -275,11 +276,11 @@ void HT_Server::handleClient(int client_fd)
                 return;
             }
 
-            std::cout << "\nHTTP Request Received\n" << data <<"\n";
+            if(config_.verbose) std::cout << "\nHTTP Request Received\n" << data <<"\n";
 
             HTTPResponse response;
 
-            std::cout << "[Parser] Method: " << request.getMethod()
+            if(config_.verbose) std::cout << "[Parser] Method: " << request.getMethod()
                         << "  | URI: " << request.getUri()
                        << "  | Host: " << request.getHeader("host") << "\n";
 
@@ -322,7 +323,7 @@ void HT_Server::handleClient(int client_fd)
                 perror("Failed to send HTTP response\n");
             }
             
-            std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
+            if(config_.verbose) std::cout << "\n[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
 }
 
 void HT_Server::workerLoop()

@@ -18,7 +18,6 @@ class ScopedSocket
             if(fd >= 0)
             {
                 close(fd);
-                std::cout << "Client socket closed automatically\n";
             }
         }
 

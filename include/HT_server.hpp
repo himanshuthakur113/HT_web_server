@@ -14,7 +14,7 @@ struct ServerConfig
     int port = 8080;
     size_t worker_count = 4;
     size_t max_queue_size = 128;
-    bool verbose = true;
+    bool verbose = false;
 };
 
 class HT_Server
