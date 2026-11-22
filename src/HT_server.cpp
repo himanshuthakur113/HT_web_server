@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <cerrno>
 
 HT_Server::HT_Server(int p) : server_fd(-1), port(p)
 {
@@ -52,85 +53,149 @@ HT_Server::HT_Server(int p) : server_fd(-1), port(p)
 
 HT_Server::~HT_Server()
 {
+    stop();
+
     if(server_fd >= 0)
     {
         close(server_fd);
-        std::cout << "Server closed successfully\n";
+        server_fd = -1;
     }
+
+    std::cout << "Server closed successfully\n";
 }
 
 void HT_Server::run()
-{
-    while(true)
+{   
+    constexpr size_t WORKER_COUNT = 4;
+
+    for(size_t i = 0; i < WORKER_COUNT; ++i)
+    {
+        workers.emplace_back(&HT_Server::workerLoop, this);
+    }
+
+    while(!stopping.load())
     {
         sockaddr_in client_address{};
         socklen_t addrlen = sizeof(client_address);
 
-        int raw_client_socket =  accept(server_fd, (struct sockaddr*)&client_address, &addrlen);
-        if(raw_client_socket < 0)
-            {
-                perror("Accept failed");
+        int client_fd =  accept(server_fd, (struct sockaddr*)&client_address, &addrlen);
+        if(client_fd < 0)
+        {   
+            if(stopping.load())
+                break;
+            
+            if(errno == EINTR)
                 continue;
-            }
+            
+
+            perror("Accept failed");
+            break;
+        }
         //so after the accept call when client(browser) connected to the server
         // it will send a block of raw text formatted according to HTTP/1.1 
-                
-        std::thread ([client_fd = raw_client_socket,this]()
-        {   
-            ScopedSocket client_socket(client_fd);
-            std::cout << "Thread " << std::this_thread::get_id() << "\n";
 
-            constexpr size_t MAX_HEADER_SIZE = 64 * 1024;
-            constexpr size_t MAX_BODY_SIZE = 1024 * 1024;
-            constexpr size_t MAX_REQUEST_SIZE = MAX_HEADER_SIZE + MAX_BODY_SIZE;
-
-            auto sendError = [&](int statusCode, const std::string& statusMessage, const std::string& message)
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            
+            if(stopping.load())
             {
-                HTTPResponse response;
-
-                response.setStatusCode(statusCode, statusMessage);
-                response.setHeader("Content-Type", "text/plain");
-                response.setHeader("Connection", "close");
-                response.setBody(message);
-
-                std::string rawResponse = response.toString();
-
-                if(!sendAll(client_socket.get(), rawResponse))
-                {
-                    perror("Failed to send error response");
-                }
-            };
-
-            std::string data;
-            char buffer[4096];
-            size_t header_end;
-
-            while((header_end = data.find("\r\n\r\n")) == std::string::npos)
-            {   
-                if(data.size() >= MAX_HEADER_SIZE)
-                {
-                    sendError(431,"Request Header Fields Too Large", "Request headers excced the allowed size");
-                    return;
-                }
-
-                //find return npos until \r\n\r\n arrived,so loop keep reading until  the headers are complete
-                ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
-                if(n <= 0)
-                {
-                    if(!data.empty())
-                    {
-                        sendError(400, "Bad Request", "Incomplete HTTP headers");
-                    }
-                    return;
-                }
-                data.append(buffer, static_cast<size_t> (n));
+                close(client_fd);
+                break;
             }
 
-            if(header_end + 4 > MAX_HEADER_SIZE)
-            {
-                sendError(431, "Request Header Fields Too Large", "Request headers exceeds the allowed size");
+            clients.push(client_fd);
+        }
+
+        cv.notify_one();
+    }
+
+    stopping.store(true);
+    cv.notify_all();
+
+    for(std::thread& worker : workers)
+    {
+        if(worker.joinable())
+            worker.join();
+    }
+
+    workers.clear();
+}       
+
+
+bool HT_Server::sendAll(int socket, const std::string& response)
+{
+    size_t total = 0;
+
+    while(total < response.length())
+    {
+        ssize_t n = send(socket, response.c_str() + total, response.length() - total, MSG_NOSIGNAL);
+
+        if(n <= 0)
+        {
+            return false;
+        }
+
+        total += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+void HT_Server::handleClient(int client_fd)
+{
+    ScopedSocket client_socket(client_fd);
+    std::cout << "Thread " << std::this_thread::get_id() << "\n";
+
+    constexpr size_t MAX_HEADER_SIZE = 64 * 1024;
+    constexpr size_t MAX_BODY_SIZE = 1024 * 1024;
+    //constexpr size_t MAX_REQUEST_SIZE = MAX_HEADER_SIZE + MAX_BODY_SIZE;
+
+    auto sendError = [&](int statusCode, const std::string& statusMessage, const std::string& message)
+    {
+        HTTPResponse response;
+
+        response.setStatusCode(statusCode, statusMessage);
+        response.setHeader("Content-Type", "text/plain");
+        response.setHeader("Connection", "close");
+        response.setBody(message);
+
+        std::string rawResponse = response.toString();
+
+        if(!sendAll(client_socket.get(), rawResponse))
+        {
+            perror("Failed to send error response");
+        }
+    };
+
+    std::string data;
+    char buffer[4096];
+    size_t header_end;
+
+    while((header_end = data.find("\r\n\r\n")) == std::string::npos)
+    {   
+        if(data.size() >= MAX_HEADER_SIZE)
+        {
+            sendError(431,"Request Header Fields Too Large", "Request headers excced the allowed size");
                 return;
+        }
+
+        //find return npos until \r\n\r\n arrived,so loop keep reading until  the headers are complete
+        ssize_t n = recv(client_socket.get(), buffer, sizeof(buffer) - 1, 0);
+        if(n <= 0)
+        {
+            if(!data.empty())
+            {
+                sendError(400, "Bad Request", "Incomplete HTTP headers");
             }
+            return;
+        }
+        data.append(buffer, static_cast<size_t> (n));
+    }
+
+    if(header_end + 4 > MAX_HEADER_SIZE)
+        {
+            sendError(431, "Request Header Fields Too Large", "Request headers exceeds the allowed size");
+            return;
+        }
 
             std::string headers = data.substr(0, header_end + 4);
 
@@ -212,7 +277,7 @@ void HT_Server::run()
 
             std::cout << "[Parser] Method: " << request.getMethod()
                         << "  | URI: " << request.getUri()
-                        << "  | Host: " << request.getHeader("host") << "\n";
+                       << "  | Host: " << request.getHeader("host") << "\n";
 
             if(request.getMethod() != "GET" && request.getMethod() != "HEAD")
             {
@@ -254,27 +319,37 @@ void HT_Server::run()
             }
             
             std::cout << "[Thread " <<std::this_thread::get_id() << "] Http response send.Closing connection\n";
-
-        }).detach();
-    }
-}       
-
-
-bool HT_Server::sendAll(int socket, const std::string& response)
-{
-    size_t total = 0;
-
-    while(total < response.length())
-    {
-        ssize_t n = send(socket, response.c_str() + total, response.length() - total, MSG_NOSIGNAL);
-
-        if(n <= 0)
-        {
-            return false;
-        }
-
-        total += static_cast<size_t>(n);
-    }
-    return true;
 }
 
+void HT_Server::workerLoop()
+{
+    while(true)
+    {
+        int client_fd;
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+
+            cv.wait(lock,[this]()
+            {
+                return !clients.empty() || stopping.load();
+            });
+
+            if(clients.empty() && stopping.load())
+            {
+                return;
+            }
+
+            client_fd = clients.front();
+            clients.pop();
+        }
+        
+        handleClient(client_fd);
+    }
+}
+
+void HT_Server::stop()
+{
+    stopping.store(true);
+    shutdown(server_fd, SHUT_RDWR);
+    cv.notify_all();
+}
