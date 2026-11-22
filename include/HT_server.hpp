@@ -9,9 +9,18 @@
 #include <condition_variable>
 #include <atomic>
 
+struct ServerConfig
+{
+    int port = 8080;
+    size_t worker_count = 4;
+    size_t max_queue_size = 128;
+    bool verbose = true;
+};
+
 class HT_Server
 {
     private:
+        ServerConfig config_;
         int server_fd;
         int port;
 
@@ -26,12 +35,12 @@ class HT_Server
         void handleClient(int client_fd);
 
     public:
-        explicit HT_Server(int p);
+        explicit HT_Server(const ServerConfig& config);
         ~HT_Server();
     
         void run();
         void stop();
-        
+
         bool sendAll(int socket, const std::string& response);  //send() does not gurantee that all the bytes will not be sent in one call
 
         HT_Server(const HT_Server&) = delete;

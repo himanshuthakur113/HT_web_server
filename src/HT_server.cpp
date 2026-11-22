@@ -12,7 +12,7 @@
 #include <thread>
 #include <cerrno>
 
-HT_Server::HT_Server(int p) : server_fd(-1), port(p)
+HT_Server::HT_Server(const ServerConfig& config) : config_(config)
 {
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(server_fd < 0)
@@ -32,7 +32,7 @@ HT_Server::HT_Server(int p) : server_fd(-1), port(p)
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(port);
+    address.sin_port = htons(config_.port);
 
     if(bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0)
     {
@@ -48,7 +48,7 @@ HT_Server::HT_Server(int p) : server_fd(-1), port(p)
         exit(1);
     }
 
-    std::cout << "Server successfully started and listening on port " <<port << "...\n";
+    std::cout << "Server successfully started and listening on port " <<config_.port << "...\n";
 }
 
 HT_Server::~HT_Server()
@@ -66,9 +66,7 @@ HT_Server::~HT_Server()
 
 void HT_Server::run()
 {   
-    constexpr size_t WORKER_COUNT = 4;
-
-    for(size_t i = 0; i < WORKER_COUNT; ++i)
+    for(size_t i = 0; i < config_.worker_count; ++i)
     {
         workers.emplace_back(&HT_Server::workerLoop, this);
     }
@@ -94,19 +92,25 @@ void HT_Server::run()
         //so after the accept call when client(browser) connected to the server
         // it will send a block of raw text formatted according to HTTP/1.1 
 
+        bool queued = false;
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
             
-            if(stopping.load())
-            {
-                close(client_fd);
-                break;
+            if(!stopping.load() && clients.size() < config_.max_queue_size)
+            {   
+                clients.push(client_fd);
+                queued = true;
             }
-
-            clients.push(client_fd);
         }
-
-        cv.notify_one();
+        if(queued)
+        {
+            cv.notify_one();
+        }
+        else
+        {
+            close(client_fd);
+        }
+        
     }
 
     stopping.store(true);
