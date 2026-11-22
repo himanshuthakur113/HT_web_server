@@ -8,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <csignal>
 
 struct ServerConfig
 {
@@ -20,9 +21,13 @@ struct ServerConfig
 class HT_Server
 {
     private:
+
         ServerConfig config_;
         int server_fd;
         int port;
+
+        std::atomic<unsigned long> accepted_count{0};
+        std::atomic<unsigned long> rejected_count{0};
 
         std::vector<std::thread> workers;
         std::queue<int> clients;
@@ -36,11 +41,14 @@ class HT_Server
         void rejectConnection(int fd);
 
     public:
+        static volatile std::sig_atomic_t interrupted; //static so whole class has single one
+        //volatile tell value can change anytime  so it must re-read each time
         explicit HT_Server(const ServerConfig& config);
         ~HT_Server();
     
         void run();
         void stop();
+        void printStats() const;
 
         bool sendAll(int socket, const std::string& response);  //send() does not gurantee that all the bytes will not be sent in one call
 

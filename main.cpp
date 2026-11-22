@@ -5,6 +5,11 @@
 #include <cstdlib>
 #include <stdexcept>
 
+static void onSignal(int)
+{
+    HT_Server::interrupted = 1;
+}
+
 int main(int argc, char* argv[]) {
     ServerConfig config;
 
@@ -52,8 +57,15 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        struct sigaction sa{};
+        sa.sa_handler = onSignal;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        sigaction(SIGINT, &sa, nullptr);
+        sigaction(SIGTERM, &sa, nullptr);
         HT_Server server(config);
         server.run();
+        server.printStats();
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';

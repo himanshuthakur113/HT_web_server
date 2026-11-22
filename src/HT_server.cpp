@@ -12,6 +12,8 @@
 #include <thread>
 #include <cerrno>
 
+volatile std::sig_atomic_t HT_Server::interrupted = 0;
+
 HT_Server::HT_Server(const ServerConfig& config) : config_(config)
 {
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -72,7 +74,7 @@ void HT_Server::run()
         workers.emplace_back(&HT_Server::workerLoop, this);
     }
 
-    while(!stopping.load())
+    while(!stopping.load() && !interrupted)
     {
         sockaddr_in client_address{};
         socklen_t addrlen = sizeof(client_address);
@@ -84,8 +86,10 @@ void HT_Server::run()
                 break;
             
             if(errno == EINTR)
+            {
+                if(interrupted) break;
                 continue;
-            
+            }
 
             perror("Accept failed");
             break;
@@ -104,11 +108,13 @@ void HT_Server::run()
             }
         }
         if(queued)
-        {
+        {   
+            accepted_count++;
             cv.notify_one();
         }
         else
-        {
+        {   
+            rejected_count++;
             rejectConnection(client_fd);
         }
         
@@ -381,4 +387,10 @@ void HT_Server::rejectConnection(int fd)
 
     shutdown(fd, SHUT_WR);   // send FIN: "I'm done sending", client can still read
     close(fd);
+}
+
+void HT_Server::printStats() const
+{
+    std::cout << "Max Connection Possible: " << config_.max_queue_size << " Total Thread: " <<  config_.worker_count 
+              <<  "\nAccepted Connection: " << accepted_count << " Rejected Connection :" << rejected_count <<"\n";
 }
