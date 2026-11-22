@@ -1,0 +1,2 @@
+Max Connection Possible: 32 Total Thread: 2
+Accepted Connection: 18965 Rejected Connection :1104

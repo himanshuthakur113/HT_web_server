@@ -1,5 +1,0 @@
-Date: Sun Nov 22 01:19:24 PM IST 2026
-CPU: Model name:                              12th Gen Intel(R) Core(TM) i5-12450H
-Kernel: 7.0.10-101.fc43.x86_64
-Compiler: g++ (GCC) 15.2.1 20260123 (Red Hat 15.2.1-7)
-Benchmark: ab -n 20000 -c 100
