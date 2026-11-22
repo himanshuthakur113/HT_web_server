@@ -41,7 +41,7 @@ HT_Server::HT_Server(const ServerConfig& config) : config_(config)
         exit(1);
     }
 
-    if(listen(server_fd, 5) < 0)
+    if(listen(server_fd, SOMAXCONN) < 0)
     {
         perror("Listen failed");
         close(server_fd);
@@ -108,7 +108,7 @@ void HT_Server::run()
         }
         else
         {
-            close(client_fd);
+            rejectConnection(client_fd);
         }
         
     }
@@ -356,4 +356,28 @@ void HT_Server::stop()
     stopping.store(true);
     shutdown(server_fd, SHUT_RDWR);
     cv.notify_all();
+}
+
+void HT_Server::rejectConnection(int fd)
+{
+    timeval tv{};
+    tv.tv_sec = 0;
+    tv.tv_usec = 20 * 1000;   // 20 ms
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    char discard[4096];
+    recv(fd, discard, sizeof(discard), 0);
+
+    HTTPResponse response;
+
+    response.setStatusCode(503, "Service Unavailable");
+    response.setHeader("Content-Type", "text/plain");
+    response.setHeader("Retry-After", "1");
+    response.setHeader("Connection", "close");
+    response.setBody("Server is overloaded. Please retry");
+
+    sendAll(fd, response.toString());
+
+    shutdown(fd, SHUT_WR);   // send FIN: "I'm done sending", client can still read
+    close(fd);
 }

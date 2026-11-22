@@ -33,6 +33,7 @@ class HT_Server
 
         void workerLoop();
         void handleClient(int client_fd);
+        void rejectConnection(int fd);
 
     public:
         explicit HT_Server(const ServerConfig& config);
