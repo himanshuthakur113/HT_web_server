@@ -109,7 +109,7 @@ client gets a clear `503` and can try again later.
 
 I tested with ApacheBench on my own machine (Intel i5-12450H, Fedora, GCC 15.2.1).
 Client and server were on localhost and the page was 209 bytes. Full tables and raw
-outputs are in [TESTING.md](TESTING.md) and the `benchmarks/` folder.
+outputs are in [TESTING.md](testing.md) and the `benchmarks/` folder.
 
 **Speed:** about 38K requests/s with 100 concurrent connections and 1 worker, p99
 latency 3 ms, 0 failed requests (median of 3 runs). More workers made it slower, about
